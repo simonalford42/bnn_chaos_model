@@ -770,13 +770,13 @@ class VarModel(pl.LightningModule):
 
             additional_features = []
 
-            for equation_set in previous_sr_model.equations_:
-                for index, equation in equation_set.iterrows():
-                    lambda_func = equation['lambda_format']
-                    evaluated_result = lambda_func(summary_stats_np)
-                    # Ensure the result is reshaped to match the batch size
-                    evaluated_result = evaluated_result.reshape(-1, 1)
-                    additional_features.append(evaluated_result)
+            equation_set = previous_sr_model.equations_
+            for index, equation in equation_set.iterrows():
+                lambda_func = equation['lambda_format']
+                evaluated_result = lambda_func(summary_stats_np)
+                # Ensure the result is reshaped to match the batch size
+                evaluated_result = evaluated_result.reshape(-1, 1)
+                additional_features.append(evaluated_result)
 
             additional_features = np.hstack(additional_features)
             additional_features_tensor = torch.tensor(additional_features, dtype=summary_stats.dtype, device=summary_stats.device)
@@ -804,12 +804,10 @@ class VarModel(pl.LightningModule):
                 def combined_predict_instability(summary_stats):
                     summary_stats_with_additional = calculate_additional_features(summary_stats, hparams['pysr_f2_residual'])
                     return residual_net(summary_stats_with_additional)
-
-                regress_nn = modules.SumModule(regress_nn, combined_predict_instability)
+                combined = modules.FunctionWrapper(combined_predict_instability)
+                regress_nn = modules.SumModule(regress_nn, combined)
             else:
                 regress_nn = modules.SumModule(regress_nn, residual_net)
-
-
 
         if 'freeze_f2' in hparams and hparams['freeze_f2']:
             utils.freeze_module(regress_nn)

@@ -17,6 +17,7 @@ import pickle
 from utils import assert_equal
 import einops
 import torch
+import pandas as pd
 
 
 LL_LOSS = """
@@ -135,13 +136,12 @@ def load_inputs_and_targets(config):
         # there are two ground truth predictions. create a data point for each
         X = einops.repeat(X, 'B F -> (B two) F', two=2)
         y = einops.rearrange(y, 'B two -> (B two) 1')
-        in_dim = model.summary_dim
+        in_dim = model.summary_dim 
         out_dim = 1
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
 
         if config['sr_residual']:
-
             # Load the PySR equations from the previous round
             with open(config['previous_sr_path'], 'rb') as f:
                 previous_sr_model = pickle.load(f)
@@ -149,24 +149,24 @@ def load_inputs_and_targets(config):
             # Evaluate the previous PySR equations on the inputs
             additional_features = []
             summary_stats_np = out_dict['summary_stats'].detach().numpy()
-            for equation_set in previous_sr_model.equations_:
-                for index, equation in equation_set.iterrows():
-                    lambda_func = equation['lambda_format']
-                    evaluated_result = lambda_func(summary_stats_np)
-                    # Ensure the result is reshaped to match the batch size
-                    evaluated_result = evaluated_result.reshape(-1, 1)
-                    additional_features.append(evaluated_result)
+            #for equation_set in previous_sr_model.equations_:
+            equation_set = previous_sr_model.equations_
+            for index, equation in equation_set.iterrows():
+                lambda_func = equation['lambda_format']
+                evaluated_result = lambda_func(summary_stats_np)
+                # Ensure the result is reshaped to match the batch size
+                evaluated_result = evaluated_result.reshape(-1, 1)
+                additional_features.append(evaluated_result)
 
             # Convert list of arrays to a single numpy array
             additional_features = np.hstack(additional_features)
             # Concatenate the original summary stats with the evaluated results
             # summary_stats_np: [1, 2000, 40]
             # additional_features: (2000, 49)
-            # (args.n, in_dim) = (250, 2*20+49)
+            # (args.n, in_dim) = (250, 2*20 + additional_features dimension)
             X = np.concatenate([summary_stats_np, additional_features], axis=1)
-
             in_dim = model.summary_dim + additional_features.shape[1]
-
+            variable_names += [f'm{i}' for i in range(additional_features.shape[1])]
     else:
         raise ValueError(f"Unknown target: {config['target']}")
 

@@ -27,10 +27,23 @@ version2=$((1 + RANDOM % 999999))
 # python -u find_minima.py --total_steps 300000 --version $version --f1_variant linear --f2_variant mlp
 # python -u find_minima.py --total_steps 300000 --version $version --f1_variant products3 --f2_variant mlp
 
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+
 # first run of pysr on f2 (direct)
-# python -u sr.py --version 29170 --target f2_direct --seed 0
+# python -u sr.py --version 29170 --target f2_direct --seed 0 # 29170 is linear + mlp
+# python -u sr.py --version 7923 --target f2_direct --seed 0 # 7923 is products3 with only cosines
+# python -u sr.py --version 8218 --target f2_direct --seed 0 # 8218 is products3 with cos and sin
+
 # second run of pysr on f2 (input is summary stats + equations)
-python -u sr.py --version 29170 --target f2_direct --residual --sr_residual --previous_sr_path sr_results/92985.pkl --seed 0
+# python -u sr.py --version 29170 --target f2_direct --sr_residual --previous_sr_path sr_results/18156.pkl --seed 0 # f1 is linear
+# python -u sr.py --version 7923 --target f2_direct --sr_residual --previous_sr_path sr_results/.pkl --seed 0 # f1 is products3 with only cosines
+# python -u sr.py --version 8218 --target f2_direct --sr_residual --previous_sr_path sr_results/37967.pkl --seed 0 # f1 is products3 with sin & cos
+
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
 
 # for direct pysr validation loss evaluation
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_model_selection best --total_steps 100 --load_f1 29170
@@ -41,8 +54,5 @@ python -u sr.py --version 29170 --target f2_direct --residual --sr_residual --pr
 # for residual (equations) pysr validation loss
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_residual sr_results/92985.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_residual sr_results/52420.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
-
-
-# .latex_table()
-# model.equations_
-# model.equations_.plot(“Complexity”, "Loss")
+#python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/18156.pkl --pysr_f2_residual sr_results/.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
+python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/37967.pkl --pysr_f2_residual sr_results/66693.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170

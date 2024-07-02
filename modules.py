@@ -8,15 +8,24 @@ import spock_reg_model
 import numpy as np
 import torch.nn.functional as F
 from petit20_survival_time import Tsurv
+import pysr
 
 
+class FunctionWrapper(nn.Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+    def forward(self, x):
+        return self.f(x)
+
+    
 class Products(nn.Module):
     '''
     Returns all products of the input variables.
     '''
     def __init__(self):
         super().__init__()
-
+        
     def forward(self, x):
         # x: [..., d]
         # returns: [..., d * d]
@@ -71,19 +80,27 @@ class Products3(nn.Module):
         i_indices = [10, 19, 28]  # i1, i2, i3
         a_indices = [8, 17, 26]  # a1, a2, a3
 
-        # Indices for angles
-        pomega_indices = [13, 22, 31]  # cos_pomega1, cos_pomega2, cos_pomega3
-        Omega_indices = [11, 20, 29]  # cos_Omega1, cos_Omega2, cos_Omega3
-        theta_indices = [15, 24, 33]  # cos_theta1, cos_theta2, cos_theta3
+        # Indices for angles (cosine)
+        cos_pomega_indices = [13, 22, 31]  # cos_pomega1, cos_pomega2, cos_pomega3
+        cos_Omega_indices = [11, 20, 29]  # cos_Omega1, cos_Omega2, cos_Omega3
+        cos_theta_indices = [15, 24, 33]  # cos_theta1, cos_theta2, cos_theta3
+
+        # Indices for angles (sine)
+        sin_pomega_indices = [14, 23, 32]  # sin_pomega1, sin_pomega2, sin_pomega3
+        sin_Omega_indices = [12, 21, 30]  # sin_Omega1, sin_Omega2, sin_Omega3
+        sin_theta_indices = [16, 25, 34]  # sin_theta1, sin_theta2, sin_theta3
 
         # Combine indices to form pairs for products
         self.products = []
-        for e, pomega in zip(e_indices, pomega_indices):
-            self.products.append((e, pomega))
-        for i, Omega in zip(i_indices, Omega_indices):
-            self.products.append((i, Omega))
-        for a, theta in zip(a_indices, theta_indices):
-            self.products.append((a, theta))
+        for e, cos_pomega, sin_pomega in zip(e_indices, cos_pomega_indices, sin_pomega_indices):
+            self.products.append((e, cos_pomega))
+            self.products.append((e, sin_pomega))
+        for i, cos_Omega, sin_Omega in zip(i_indices, cos_Omega_indices, sin_Omega_indices):
+            self.products.append((i, cos_Omega))
+            self.products.append((i, sin_Omega))
+        for a, cos_theta, sin_theta in zip(a_indices, cos_theta_indices, sin_theta_indices):
+            self.products.append((a, cos_theta))
+            self.products.append((a, sin_theta))
 
         # Convert list of pairs to tensor
         self.products = torch.tensor(self.products)
@@ -93,7 +110,6 @@ class Products3(nn.Module):
         products = x[..., self.products[:, 0]] * x[..., self.products[:, 1]]
         # Concatenate product features with original features
         return torch.cat([x, products], dim=-1)
-
 
 # instead of sigmoid and sum, use a softmax.
 # sum over predicates is 1, decrease temperature over training so it specializes

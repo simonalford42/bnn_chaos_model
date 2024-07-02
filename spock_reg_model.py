@@ -20,21 +20,28 @@ import utils
 import modules
 import glob
 from matplotlib import pyplot as plt
-
-
-def load(version, seed=0):
-    path = utils.ckpt_path(version, seed)
-    try:
-        f = path + '/version=0-v0.ckpt'
-        model = VarModel.load_from_checkpoint(f)
-    except FileNotFoundError:
-        f = path + '/version=0.ckpt'
-        model = VarModel.load_from_checkpoint(f)
-
-    return model
-
 import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
+
+def load(version, seed=None):
+    path = utils.ckpt_path(version, seed)
+
+    f = path + '/version=0-v0.ckpt'
+    if os.path.exists(f):
+        return VarModel.load_from_checkpoint(f)
+    f = path + '/version=0.ckpt'
+    if os.path.exists(f):
+        return VarModel.load_from_checkpoint(f)
+
+    # try again one directory up, in case we're running from figures/ folder
+    path = '../' + path
+    f = path + '/version=0-v0.ckpt'
+    if os.path.exists(f):
+        return VarModel.load_from_checkpoint(f)
+    f = path + '/version=0.ckpt'
+    if os.path.exists(f):
+        return VarModel.load_from_checkpoint(f)
+
 
 class BioLinear(nn.Module):
     # BioLinear is just Linear, but each neuron comes with coordinates.
@@ -754,6 +761,9 @@ class VarModel(pl.LightningModule):
                 if 'load_f1' in hparams and hparams['load_f1']:
                     print('Using --load_f1 network regress_nn to predict std')
                     base_f2 = load(hparams['load_f1'], seed=hparams['seed']).regress_nn
+                    regress_nn = base_f2
+                    # base_f2 = modules.PySRNet('sr_results/29741.pkl', 'best')
+                    utils.freeze_module(base_f2)
                 else:
                     print('Initializing new network to predict std')
                     base_f2 = modules.mlp(summary_dim, 2, hparams['hidden_dim'], hparams['f2_depth'])
@@ -814,6 +824,7 @@ class VarModel(pl.LightningModule):
 
         return regress_nn, summary_dim
 
+
     def get_feature_nn(self, hparams):
         feature_nn = None
         out_dim = hparams['latent'] # certain f1 variants might change this
@@ -847,6 +858,7 @@ class VarModel(pl.LightningModule):
             feature_nn = modules.ZeroNN(in_n=self.n_features, out_n=hparams['latent'])
         elif hparams['f1_variant'] == 'linear':
             feature_nn = nn.Linear(self.n_features, hparams['latent'], bias=False)
+            # feature_nn = nn.Linear(self.n_features, hparams['latent'], bias=True) # if loading 21101
         elif hparams['f1_variant'] == 'bimt':
             feature_nn = BioMLP(in_dim=self.n_features, out_dim=hparams['latent'])
         elif hparams['f1_variant'] == 'biolinear':
@@ -1139,8 +1151,8 @@ class VarModel(pl.LightningModule):
                 'f1_output': self.feature_nn(x),
                 'summary_stats': summary_stats,
                 'prediction': pred,
-                'predicted_mean': mu,
-                'predicted_std': std
+                'mean': mu,
+                'std': std
             }
             if 'ifthen' in self.hparams['f2_variant']:
                 d['ifthen_preds'] = self.regress_nn.preds(summary_stats)

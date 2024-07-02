@@ -14,6 +14,7 @@ from scipy.stats import truncnorm
 import time
 from tqdm.notebook import tqdm
 import utils
+import os
 
 command = utils.get_script_execution_command()
 print(command)
@@ -29,19 +30,15 @@ checkpoint_filename = utils.ckpt_path(args.version, args.seed)
 
 seed = args.seed
 
-if not args.run_swag:
-    print('no swag, exiting')
-    exit(0)
-
 TOTAL_STEPS = args.swa_steps
 TRAIN_LEN = 78660
 batch_size = args.batch_size  # 2000 #ilog_rand(32, 3200)
 steps_per_epoch = int(1+TRAIN_LEN/batch_size)
 epochs = int(1+TOTAL_STEPS/steps_per_epoch)
-print(f"epochs: {epochs}")
 
 swa_args = {
-    'slurm_id': args.slurm_id,
+    'slurm_id': os.environ.get('SLURM_JOB_ID', None),
+    'slurm_name': os.environ.get('SLURM_JOB_NAME', None),
     'version': args.version,
     'swa_lr' : 1e-4, #1e-4 is largest before NaN
     'swa_start' : int(0.5*TOTAL_STEPS), #step

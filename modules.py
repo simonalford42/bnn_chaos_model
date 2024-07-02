@@ -337,8 +337,8 @@ def load_pysr_module_list(filepath, model_selection):
             ix = np.argmin(np.abs(reg.equations_['complexity'] - int(model_selection)))
             ixs = [ix]
 
-        print('PySR model selection ixs:', ixs)
-        return nn.ModuleList(reg.pytorch(index=ixs))
+        modules = reg.pytorch(index=ixs)
+        return nn.ModuleList(modules)
 
 
 class PySRRegressNN(nn.Module):
@@ -353,13 +353,15 @@ class PySRRegressNN(nn.Module):
     def forward(self, x):
         B = x.shape[0]
         out = self.pysr_net(x)
-        if out.shape[-1] == 1:
-            mean = out  # [B, 1]
-            base = self.base_f2_module(x)  # [B, 2]
-            utils.assert_equal(mean.shape, (B, 1))
-            utils.assert_equal(base.shape, (B, 2))
-            out = einops.rearrange([mean[:, 0], base[:, 1]], 'two B -> B two')
-
+        # if out.shape[-1] == 1:
+        # mean = out  # [B, 1]
+        mean = out[:, 0:1]
+        base = self.base_f2_module(x)  # [B, 2]
+        utils.assert_equal(mean.shape, (B, 1))
+        utils.assert_equal(base.shape, (B, 2))
+        # utils.assert_equal(base.shape, (B, 1))
+        # out = einops.rearrange([mean[:, 0], base[:, 0]], 'two B -> B two')
+        out = einops.rearrange([mean[:, 0], base[:, 1]], 'two B -> B two')
         utils.assert_equal(out.shape, (B, 2))
         return out
 

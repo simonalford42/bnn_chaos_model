@@ -18,6 +18,7 @@ from utils import assert_equal
 import einops
 import torch
 import pandas as pd
+import math
 
 
 LL_LOSS = """
@@ -90,7 +91,7 @@ def load_inputs_and_targets(config):
         y = torch.cat([y, next_y], dim=0)
 
     # we use noisy val bc it is used during training the NN too
-    out_dict = model.forward(x, return_intermediates=True, noisy_val=True)
+    out_dict = model.forward(x, return_intermediates=True, noisy_val=False)
 
     if config['target'] == 'f1':
         # inputs to SR are the inputs to f1 neural network
@@ -107,25 +108,32 @@ def load_inputs_and_targets(config):
         # extract just the input variables we're actually using
         assert_equal(len(LABELS), X.shape[1])
         X = X[..., INCLUDED_IXS]
+
         in_dim = len(INCLUDED_IXS)
         out_dim = model.hparams['latent']
+
         variable_names = INPUT_VARIABLE_NAMES
     elif config['target'] == 'f2':
         # inputs to SR are the inputs to f2 neural network
         X = out_dict['summary_stats']  # [B, 40]
-        # target for SR is the predicted mean
-        y = out_dict['predicted_mean']  # [B, 1]
+        # outputs are the (mean, std) predictions of the nn
+        y = out_dict['prediction']  # [B, 2]
+
         in_dim = model.summary_dim
-        out_dim = 1
+        out_dim = 2
+
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
+
     elif config['target'] == 'f2_ifthen':
         # inputs to SR are the inputs to f2 neural network
         X = out_dict['summary_stats']  # [B, 40]
         # target for SR is the predicates from the ifthen network
         y = out_dict['ifthen_preds']  # [B, 10]
+
         in_dim = model.summary_dim
         out_dim = 10
+
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
     elif config['target'] == 'f2_direct':
@@ -138,6 +146,7 @@ def load_inputs_and_targets(config):
         y = einops.rearrange(y, 'B two -> (B two) 1')
         in_dim = model.summary_dim 
         out_dim = 1
+
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
 
@@ -173,7 +182,14 @@ def load_inputs_and_targets(config):
     if config['residual']:
         assert config['target'] == 'f2_direct', 'residual requires a direct target'
         # target is the residual error of the model's prediction from the ground truth
-        y = y - out_dict['predicted_mean']
+        # because target was f2 direct, y shape is [B * 2, 1]
+        # but predicted mean is [B, 1]
+        # so repeat the predicted means
+        y_old = out_dict['mean']
+        assert_equal(y_old.shape[1], 1)
+        y_old = einops.repeat(y_old, 'B one -> (B repeat) one', repeat=2)
+        assert_equal(y_old.shape, y.shape)
+        y = y - y_old
 
     # go down from having a batch of size B to just N
     ixs = np.random.choice(X.shape[0], size=config['n'], replace=False)
@@ -237,6 +253,13 @@ def get_config(args):
 
 
 def run_pysr(config):
+    command = utils.get_script_execution_command()
+    print(command)
+
+    X, y, variable_names = load_inputs_and_targets(config)
+
+    model = pysr.PySRRegressor(**config['pysr_config'])
+
     if not config['no_log']:
         wandb.init(
             entity='bnn-chaos-model',
@@ -244,24 +267,17 @@ def run_pysr(config):
             config=config,
         )
 
-    command = utils.get_script_execution_command()
-    print(command)
-
-    X, y, variable_names = load_inputs_and_targets(config)
-
-    model = pysr.PySRRegressor(**config['pysr_config'])
     model.fit(X, y, variable_names=variable_names)
     print('Done running pysr')
 
     losses = [min(eqs['loss']) for eqs in model.equation_file_contents_]
+
     if not config['no_log']:
         wandb.log({'avg_loss': sum(losses)/len(losses),
                    'losses': losses,
                    })
 
     try:
-        # delete the backup files
-        subprocess.run(f"rm {config['equation_file'][:-4]}.csv.out*.bkup", shell=True, check=True)
         # delete julia files: julia-1911988-17110333239-0016.out
         subprocess.run(f'rm julia*.out', shell=True, check=True)
     except subprocess.CalledProcessError as e:
@@ -298,7 +314,7 @@ def parse_args():
     parser.add_argument('--time_in_hours', type=float, default=1)
     parser.add_argument('--niterations', type=float, default=500000) # by default, use time in hours as limit
     parser.add_argument('--max_size', type=int, default=30)
-    parser.add_argument('--target', type=str, default='f2_direct', choices=['f1', 'f2', 'f2_ifthen', 'f2_direct'])
+    parser.add_argument('--target', type=str, default='f2_direct', choices=['f1', 'f2', 'f2_ifthen', 'f2_direct', 'f2_2'])
     parser.add_argument('--residual', action='store_true', help='do residual training of your target')
     parser.add_argument('--n', type=int, default=5000, help='number of data points for the SR problem')
     parser.add_argument('--sr_residual', action='store_true', help='do residual training of your target with previous sr run as base')

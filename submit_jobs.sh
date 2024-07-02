@@ -1,8 +1,65 @@
 #!/usr/bin/env bash
 
+# ------------------------------- Fri June 28 -----------------------------------
+
+# bash train.sh --load_f1 43139 --pysr_f2 'sr_results/33060.pkl' --pysr_f2_model_selection best --eval
+
+complexity_values=(1 3 4 5 7 9 10 11 12 13 14 15 20 25 30)
+
+for complexity in "${complexity_values[@]}"; do
+    echo "Running for complexity: $complexity"
+    bash train.sh --load_f1 43139 --pysr_f2 'sr_results/33060.pkl' --pysr_f2_model_selection "$complexity" --eval
+done
+
+
+# ------------------------------- Thu June 27 -----------------------------------
+
+# sbatch -J sr --partition ellis --time 24:00:00 sr.sh --time_in_hours 22 --version 43139
+# bash train.sh --load_f1 43139 --pysr_f2 'sr_results/20592.pkl' --pysr_f2_model_selection best --eval
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/hall_of_fame_f2_21101_0_1.pkl' --pysr_f2_model_selection 14 --eval
+# bash train.sh --load_f1 43139 --pysr_f2 'sr_results/87545.pkl' --pysr_f2_model_selection best --eval
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/hall_of_fame_f2_21101_0_1.pkl' --pysr_f2_model_selection best --eval
+
+# sbatch -J sr --partition ellis sr.sh --time_in_hours 0.05 --version 21101 --target f22
+
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/76025.pkl' --pysr_f2_model_selection best --eval
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/65404.pkl' --pysr_f2_model_selection best --eval
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/61400.pkl' --pysr_f2_model_selection best --eval
+
+# sbatch -J sr --partition ellis sr.sh --time_in_hours 0.05 --version 21101 --target f2
+
+# bash train.sh --load_f1 21101 --pysr_f2 'sr_results/61400.pkl' --pysr_f2_model_selection best --eval
+
+# sbatch -J sr --partition gpu sr.sh --time_in_hours 0.05 --version 43139 --target f2
+# sbatch -J sr --partition gpu --time 2:00:00 sr.sh --time_in_hours 1 --version 43139 --target f2
+# sbatch -J sr --partition gpu --time 9:00:00 sr.sh --time_in_hours 8 --version 43139 --target f2
+# sbatch -J sr --partition gpu --time 25:00:00 sr.sh --time_in_hours 24 --version 43139 --target f2
+
+# ------------------------------- Tue June 25 -----------------------------------
+
+# bash train.sh --total_steps 50 --load_f1 43139 --pysr_f2 'sr_results/66312.pkl' --pysr_f2_model_selection best --eval
+
+# sbatch -J 1eval --partition gpu train.sh --total_steps 100 --load 21101 --pysr_f2 'sr_results/hall_of_fame_f2_21101_0_1.pkl' --pysr_model_selection 1 --freeze_pysr_f2 --eval
+# sbatch -J 20eval --partition gpu train.sh --total_steps 100 --no_swag --load 21101 --pysr_f2 'sr_results/hall_of_fame_f2_21101_0_1.pkl' --pysr_model_selection 20 --freeze_pysr_f2 --eval
+# sbatch -J 14eval --partition gpu train.sh --total_steps 100 --no_swag --load 21101 --pysr_f2 'sr_results/hall_of_fame_f2_21101_0_1.pkl' --pysr_model_selection 14 --freeze_pysr_f2 --eval
+# sbatch -J sr --partition ellis --time 12:00:00 sr.sh --time_in_hours 7 --version 43139
+
+# ------------------------------- Mon June 24 -----------------------------------
+
+# sbatch -J sr --partition ellis --time 08:00:00 sr.sh --time_in_hours 7 --version 43139
+# sbatch -J sr --partition ellis --time 24:00:00 sr.sh --time_in_hours 23 --version 43139
+
+# ------------------------------- Sun June 23 -----------------------------------
+
+# sbatch -J sr --partition ellis --time 00:05:00 sr.sh --time_in_hours 0.01 --version 24880 --residual
+
+# ------------------------------- Fri June 21 -----------------------------------
+
+# sbatch -J prod3 --partition gpu train.sh --f1_variant products3
+
 # ------------------------------- Wed June 18 -----------------------------------
 
-sbatch -J sr --partition gpu --time 00:01:00 sr.sh --time_in_hours 0.01 --version 24880
+# sbatch -J sr --partition gpu --time 00:01:00 sr.sh --time_in_hours 0.01 --version 24880
 # sbatch -J sr --partition ellis --time 00:01:00 sr.sh --time_in_hours 0.001 --version 24880 --sr_residual --previous_sr_path 'sr_results/8092.pkl'
 
 # ------------------------------- Tue June 18 -----------------------------------

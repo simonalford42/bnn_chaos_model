@@ -26,21 +26,29 @@ warnings.filterwarnings("ignore", category=ResourceWarning)
 Example commands:
 
 # compute and plot for BNN predictions
-python period_ratio_figure.py --Ngrid 4 --version 24880 --compute
-python period_ratio_figure.py --Ngrid 4 --version 24880 --plot
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --compute
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --plot
 
 # compute and plot for pysr f2 (need to have computed for BNN before running this)
-python period_ratio_figure.py --Ngrid 4 --version 24880 --pysr_version 33060 --compute
-python period_ratio_figure.py --Ngrid 4 --version 24880 --pysr_version 33060 --plot
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 18156 --compute
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 18156 --plot
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 37967 --compute
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 37967 --plot
+
+# compute and plot for residual pysr f2 (need to have computed for BNN before running this)
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 18156 --residual_pysr_version  --compute
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 18156 --residual_pysr_version  --plot
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 37967 --residual_pysr_version 66693 --compute
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 37967 --residual_pysr_version 66693 --plot
 
 # compute using 4 parallel jobs
-python period_ratio_figure.py --Ngrid 400 --version 24880 --compute --parallel_ix 0 --parallel_total 4
-python period_ratio_figure.py --Ngrid 400 --version 24880 --compute --parallel_ix 1 --parallel_total 4
-python period_ratio_figure.py --Ngrid 400 --version 24880 --compute --parallel_ix 2 --parallel_total 4
-python period_ratio_figure.py --Ngrid 400 --version 24880 --compute --parallel_ix 3 --parallel_total 4
+python period_ratio_figure.py --Ngrid 400 --version 43139 --compute --parallel_ix 0 --parallel_total 4
+python period_ratio_figure.py --Ngrid 400 --version 43139 --compute --parallel_ix 1 --parallel_total 4
+python period_ratio_figure.py --Ngrid 400 --version 43139 --compute --parallel_ix 2 --parallel_total 4
+python period_ratio_figure.py --Ngrid 400 --version 43139 --compute --parallel_ix 3 --parallel_total 4
 
 # collate the parallel results and save
-python period_ratio_figure.py --Ngrid 400 --version 24880 --collate
+python period_ratio_figure.py --Ngrid 400 --version 43139 --collate
 
 # copy needed files to local so we can plot
 scopy bnn_chaos_model/figures/period_results/v=43139_ngrid=6_pysr_f2_v=33060/ ~/code/bnn_chaos_model/figures/period_results/
@@ -60,7 +68,11 @@ def get_args():
     parser.add_argument('--pysr_version', type=str, default=None) # sr_results/33060.pkl
     parser.add_argument('--pysr_dir', type=str, default='../sr_results/')  # folder containing pysr results pkl
 
+    parser.add_argument('--residual_pysr_version', type=str, default=None) # sr_results/33060.pkl
+    parser.add_argument('--residual_pysr_dir', type=str, default='../sr_results/')  # folder containing pysr results pkl
+
     parser.add_argument('--pysr_model_selection', type=str, default=None, help='"best", "accuracy", "score", or an integer of the pysr equation complexity. If not provided, will do all complexities. If plotting, has to be an integer complexity')
+    parser.add_argument('--residual_pysr_model_selection', type=str, default=None, help='"best", "accuracy", "score", or an integer of the pysr equation complexity. If not provided, will do all complexities. If plotting, has to be an integer complexity')
 
     # parallel processing args
     # ix should be in [0, total)
@@ -70,9 +82,15 @@ def get_args():
     args = parser.parse_args()
 
     if args.pysr_version is not None:
+        print("hihi")
         args.pysr_path = os.path.join(args.pysr_dir, f'{args.pysr_version}.pkl')
     else:
         args.pysr_path = None
+    
+    if args.residual_pysr_version is not None:
+        args.residual_pysr_path = os.path.join(args.residual_pysr_dir, f'{args.residual_pysr_version}.pkl')
+    else:
+        args.residual_pysr_path = None
 
     return args
 
@@ -318,8 +336,10 @@ def plot_results(args, metric=None):
     if metric == 'std':
         path += '_std'
 
-    if args.pysr_model_selection is not None:
+    if args.pysr_model_selection is not None and args.residual_pysr_model_selection is None:
         path += f'_pysr_f2_v={args.pysr_version}/{args.pysr_model_selection}'
+    if args.pysr_model_selection is not None and args.residual_pysr_model_selection is not None:
+        path += f'_residual_pysr_f2_v={args.pysr_version}/{args.pysr_model_selection}/{args.residual_pysr_version}/{args.residual_pysr_model_selection}'
 
     path += '.png'
 
@@ -328,16 +348,41 @@ def plot_results(args, metric=None):
     print('Saved figure to', path)
     plt.close(fig)
 
+import pickle as pkl
+def calculate_additional_features(summary_stats, previous_sr_model_path):
+    with open(previous_sr_model_path, 'rb') as f:
+        previous_sr_model = pkl.load(f)
 
+    additional_features = []
+    summary_stats_np = summary_stats.cpu().detach().numpy()
+    for equation_set in previous_sr_model.equations_:
+        for index, equation in equation_set.iterrows():
+            lambda_func = equation['lambda_format']
+            evaluated_result = lambda_func(summary_stats_np)
+            # Ensure the result is reshaped to match the batch size
+            evaluated_result = evaluated_result.reshape(-1, 1)
+            additional_features.append(evaluated_result)
+
+    additional_features = np.hstack(additional_features)
+    additional_features_tensor = torch.tensor(additional_features, dtype=summary_stats.dtype, device=summary_stats.device)
+    return torch.cat([summary_stats, additional_features_tensor], dim=-1)
+
+# TODO: Should work for both spock_reg_model and period_ratio_figure
 def get_pysr_module(sr_results_path, residual_sr_results_path=None, model_selection=None, residual_model_selection=None):
-    # TODO: edward
     if residual_sr_results_path is None:
-        # nonresidual sr
+        # Non-residual symbolic regression
         regress_nn = modules.PySRNet(sr_results_path, model_selection).cuda()
         return regress_nn
     else:
-        # ... do it for residual.
-        pass
+        # Residual symbolic regression
+        base_regress_nn = modules.PySRNet(sr_results_path, model_selection).cuda()
+        def combined_predict_instability(summary_stats):
+            summary_stats_with_additional = calculate_additional_features(summary_stats, hparams['pysr_f2_residual'])
+            return residual_net(summary_stats_with_additional)
+        combined = modules.FunctionWrapper(combined_predict_instability)
+        regress_nn = modules.SumModule(base_regress_nn, combined)
+    
+        return regress_nn
 
 
 def compute_pysr_f2_results(args):
@@ -356,7 +401,12 @@ def compute_pysr_f2_results(args):
     batch = torch.tensor(batch).float().cuda()
 
     for model_selection in model_selections:
-        regress_nn = modules.PySRNet(args.pysr_path, model_selection).cuda()
+        regress_nn = get_pysr_module(
+            args.pysr_path,
+            residual_sr_results_path=args.residual_pysr_path,
+            model_selection=model_selection,
+            residual_model_selection=args.residual_pysr_model_selection
+        )
         pred = regress_nn(batch).detach().cpu().numpy()
         results = np.full((len(f1_results), pred.shape[1]), np.NaN)
         results[good_ixs] = pred
@@ -387,30 +437,69 @@ def compute_pysr_f2_results(args):
     return results
 
 
+# def plot_results_pysr_f2(args):
+#     # get the model selections by grepping for the files
+#     path = get_results_path(args.Ngrid, args.version, pysr_version=args.pysr_version, pysr_model_selection='*')
+#     files = os.listdir(os.path.dirname(path))
+
+#     # filter to those of form f'{i}.pkl'
+#     files = [file for file in files if file.endswith('.pkl')]
+
+#     # go from f'{model_selection}.pkl' to model_selection
+#     model_selections = sorted([int(f.split('.')[0]) for f in files])
+
+#     # if model selection is provided, filter to those
+#     if args.pysr_model_selection is not None:
+#         files = [file for file in files if file.startswith(args.pysr_model_selection)]
+
+#     # go from f'{model_selection}.pkl' to model_selection
+#     model_selections = [int(f.split('.')[0]) for f in files]
+#     model_selections = sorted(model_selections)
+
+#     original_model_selection = args.pysr_model_selection
+#     for model_selection in model_selections:
+#         args.pysr_model_selection = model_selection
+#         plot_results(args)
+#     args.pysr_model_selection = original_model_selection
+
+
 def plot_results_pysr_f2(args):
-    # get the model selections by grepping for the files
     path = get_results_path(args.Ngrid, args.version, pysr_version=args.pysr_version, pysr_model_selection='*')
     files = os.listdir(os.path.dirname(path))
 
-    # filter to those of form f'{i}.pkl'
     files = [file for file in files if file.endswith('.pkl')]
 
-    # go from f'{model_selection}.pkl' to model_selection
     model_selections = sorted([int(f.split('.')[0]) for f in files])
 
-    # if model selection is provided, filter to those
     if args.pysr_model_selection is not None:
-        files = [file for file in files if file.startswith(args.pysr_model_selection)]
+        files = [file for file in files if file.startswith(str(args.pysr_model_selection))]
 
-    # go from f'{model_selection}.pkl' to model_selection
     model_selections = [int(f.split('.')[0]) for f in files]
     model_selections = sorted(model_selections)
 
+    residual_files = []
+    residual_model_selections = []
+
+    if args.residual_pysr_path:
+        residual_path = get_results_path(args.Ngrid, args.version, pysr_version=args.pysr_version, residual_model_selection='*')
+        residual_files = os.listdir(os.path.dirname(residual_path))
+        residual_files = [file for file in residual_files if file.endswith('.pkl')]
+        residual_model_selections = sorted([int(f.split('.')[0]) for f in residual_files])
+
     original_model_selection = args.pysr_model_selection
+    original_residual_model_selection = args.residual_pysr_model_selection
+
     for model_selection in model_selections:
         args.pysr_model_selection = model_selection
-        plot_results(args)
+        if residual_model_selections:
+            for residual_model_selection in residual_model_selections:
+                args.residual_pysr_model_selection = residual_model_selection
+                plot_results(args)
+        else:
+            plot_results(args)
+
     args.pysr_model_selection = original_model_selection
+    args.residual_pysr_model_selection = original_residual_model_selection
 
 
 if __name__ == '__main__':
@@ -427,6 +516,7 @@ if __name__ == '__main__':
 
     if args.plot:
         if args.pysr_path:
+            print("hi")
             plot_results_pysr_f2(args)
         else:
             plot_results(args)

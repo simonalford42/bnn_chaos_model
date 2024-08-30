@@ -19,7 +19,7 @@ import einops
 import torch
 import pandas as pd
 import math
-
+from sklearn.metrics import mean_squared_error    
 
 LL_LOSS = """
 function elementwise_loss(prediction, target)
@@ -95,8 +95,7 @@ def load_inputs_and_targets(config):
 
     if config['target'] == 'f1':
         # inputs to SR are the inputs to f1 neural network
-        # we use this instead of x because the model zeros the unused inputs,
-        #  which is a nice check to have
+        # we use this instead of x because the model zeros the unused inputs
         X = out_dict['inputs']  # [B, T, F]
         # targets for SR are the outputs of the f1 neural network
         y = out_dict['f1_output']  # [B, T, F]
@@ -106,7 +105,7 @@ def load_inputs_and_targets(config):
         y = rearrange(y, 'B T F -> (B T) F')
 
         # extract just the input variables we're actually using
-        assert_equal(len(LABELS), X.shape[1])
+        assert len(LABELS) == X.shape[1]
         X = X[..., INCLUDED_IXS]
 
         in_dim = len(INCLUDED_IXS)
@@ -117,13 +116,69 @@ def load_inputs_and_targets(config):
         # inputs to SR are the inputs to f2 neural network
         X = out_dict['summary_stats']  # [B, 40]
         # outputs are the (mean, std) predictions of the nn
-        y = out_dict['prediction']  # [B, 2]
+        # y = out_dict['prediction']  # [B, 2]
+        y = y
 
         in_dim = model.summary_dim
         out_dim = 2
 
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
+
+        if config['sr_residual']:
+            # 1. load the previous pysr results, using highest complexity
+            with open(config['previous_sr_path'], 'rb') as f:
+                previous_sr_model = pickle.load(f)
+
+            # 2. calculate mean and std from previous results (previous run must have used target=='f2')
+            if isinstance(out_dict['summary_stats'], torch.Tensor):
+                summary_stats_np = out_dict['summary_stats'].detach().numpy()
+            else:
+                summary_stats_np = out_dict['summary_stats']
+
+            # get the highest complexity equation
+            mean_equations = previous_sr_model.equations_[0]
+            std_equations = previous_sr_model.equations_[1]
+            max_complexity_idx_mean = mean_equations['complexity'].idxmax()
+            max_complexity_idx_std = std_equations['complexity'].idxmax()
+
+            mean_equation = mean_equations.loc[max_complexity_idx_mean]
+            std_equation = std_equations.loc[max_complexity_idx_std]
+
+            # Uncomment for y=y and comment out rest of if statement for y = y - predicted
+            additional_features = []
+            for equation_set in previous_sr_model.equations_:
+                for index, equation in equation_set.iterrows():
+                    lambda_func = equation['lambda_format']
+                    evaluated_result = lambda_func(summary_stats_np)
+                    # Ensure the result is reshaped to match the batch size
+                    evaluated_result = evaluated_result.reshape(-1, 1)
+                    additional_features.append(evaluated_result)
+
+            # Convert list of arrays to a single numpy array
+            additional_features = np.hstack(additional_features)
+            # Concatenate the original summary stats with the evaluated results
+            X = np.concatenate([summary_stats_np, additional_features], axis=1)
+            in_dim = model.summary_dim + additional_features.shape[1]
+            variable_names += [f'm{i}' for i in range(additional_features.shape[1])]
+
+            # # mean and std
+            # results = []
+            # for equation in [mean_equation, std_equation]:
+            #     lambda_func = equation['lambda_format']
+            #     evaluated_result = lambda_func(summary_stats_np)
+            #     # Ensure the result is reshaped to match the batch size
+            #     evaluated_result = evaluated_result.reshape(-1, 1)
+            #     results.append(evaluated_result)
+
+            # # 3. concatenate mean and std to produce previous "prediction" of shape [B, 2]
+            # previous_prediction = np.hstack(results)
+            # assert previous_prediction.shape == (X.shape[0], 2)  # [B, 2]
+
+            # # 4. subtract previous prediction from y to get residual target
+            # if isinstance(y, torch.Tensor):
+            #     y = y.detach().numpy()
+            # y = y - previous_prediction 
 
     elif config['target'] == 'f2_ifthen':
         # inputs to SR are the inputs to f2 neural network
@@ -136,11 +191,12 @@ def load_inputs_and_targets(config):
 
         n = X.shape[1] // 2
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
+
     elif config['target'] == 'f2_direct':
         # inputs to SR are the inputs to f2 neural network
         X = out_dict['summary_stats']  # [B, 40]
         # target for SR is the ground truth mean, which we already have
-        y = y  # [B, 2]
+        y = y # [B, 2]
         # there are two ground truth predictions. create a data point for each
         X = einops.repeat(X, 'B F -> (B two) F', two=2)
         y = einops.rearrange(y, 'B two -> (B two) 1')
@@ -156,16 +212,19 @@ def load_inputs_and_targets(config):
                 previous_sr_model = pickle.load(f)
 
             # Evaluate the previous PySR equations on the inputs
+            if isinstance(out_dict['summary_stats'], torch.Tensor):
+                summary_stats_np = out_dict['summary_stats'].detach().numpy()
+            else:
+                summary_stats_np = out_dict['summary_stats']
+            
             additional_features = []
-            summary_stats_np = out_dict['summary_stats'].detach().numpy()
-            #for equation_set in previous_sr_model.equations_:
-            equation_set = previous_sr_model.equations_
-            for index, equation in equation_set.iterrows():
-                lambda_func = equation['lambda_format']
-                evaluated_result = lambda_func(summary_stats_np)
-                # Ensure the result is reshaped to match the batch size
-                evaluated_result = evaluated_result.reshape(-1, 1)
-                additional_features.append(evaluated_result)
+            for equation_set in previous_sr_model.equations_:
+                for index, equation in equation_set.iterrows():
+                    lambda_func = equation['lambda_format']
+                    evaluated_result = lambda_func(summary_stats_np)
+                    # Ensure the result is reshaped to match the batch size
+                    evaluated_result = evaluated_result.reshape(-1, 1)
+                    additional_features.append(evaluated_result)
 
             # Convert list of arrays to a single numpy array
             additional_features = np.hstack(additional_features)
@@ -186,9 +245,9 @@ def load_inputs_and_targets(config):
         # but predicted mean is [B, 1]
         # so repeat the predicted means
         y_old = out_dict['mean']
-        assert_equal(y_old.shape[1], 1)
+        assert y_old.shape[1] == 1
         y_old = einops.repeat(y_old, 'B one -> (B repeat) one', repeat=2)
-        assert_equal(y_old.shape, y.shape)
+        assert y_old.shape == y.shape
         y = y - y_old
 
     # go down from having a batch of size B to just N
@@ -197,10 +256,12 @@ def load_inputs_and_targets(config):
 
     # Ensure X and y are NumPy arrays
     if isinstance(X, torch.Tensor):
-        X, y = X.detach().numpy(), y.detach().numpy()
+        X = X.detach().numpy()
+    if isinstance(y, torch.Tensor):
+        y = y.detach().numpy()
 
-    assert_equal(X.shape, (config['n'], in_dim))
-    assert_equal(y.shape, (config['n'], out_dim))
+    assert X.shape == (config['n'], in_dim)
+    assert y.shape == (config['n'], out_dim)
 
     return X, y, variable_names
 
@@ -238,6 +299,70 @@ def get_config(args):
     if args.loss_fn == 'll':
         assert args.target == 'f2_direct', 'log likelihood loss only useful for f2_direct'
         pysr_config['elementwise_loss'] = LL_LOSS
+    else:
+        with open(config['previous_sr_path'], 'rb') as f:
+            previous_sr_model = pickle.load(f)
+
+        if 'residual_sr_path' in config:
+            with open(config['residual_sr_path'], 'rb') as f:
+                residual_sr_model = pickle.load(f)
+        else:
+            residual_sr_model = None
+
+        # Evaluate the original SR model
+        summary_stats_np = X if isinstance(X, np.ndarray) else X.detach().numpy()
+        
+        mean_equations = previous_sr_model.equations_[0]
+        std_equations = previous_sr_model.equations_[1]
+        max_complexity_idx_mean = mean_equations['complexity'].idxmax()
+        max_complexity_idx_std = std_equations['complexity'].idxmax()
+
+        mean_equation = mean_equations.loc[max_complexity_idx_mean]
+        std_equation = std_equations.loc[max_complexity_idx_std]
+
+        results = []
+        for equation in [mean_equation, std_equation]:
+            lambda_func = equation['lambda_format']
+            evaluated_result = lambda_func(summary_stats_np)
+            # Ensure the result is reshaped to match the batch size
+            evaluated_result = evaluated_result.reshape(-1, 1)
+            results.append(evaluated_result)
+
+        previous_prediction = np.hstack(results)
+        assert previous_prediction.shape == (X.shape[0], 2)  # [B, 2]
+
+        # Evaluate the residual SR model
+        if residual_sr_model:
+            residual_results = []
+            residual_mean_equations = residual_sr_model.equations_[0]
+            residual_std_equations = residual_sr_model.equations_[1]
+            max_complexity_idx_residual_mean = residual_mean_equations['complexity'].idxmax()
+            max_complexity_idx_residual_std = residual_std_equations['complexity'].idxmax()
+
+            residual_mean_equation = residual_mean_equations.loc[max_complexity_idx_residual_mean]
+            residual_std_equation = residual_std_equations.loc[max_complexity_idx_residual_std]
+
+            for equation in [residual_mean_equation, residual_std_equation]:
+                lambda_func = equation['lambda_format']
+                evaluated_result = lambda_func(summary_stats_np)
+                evaluated_result = evaluated_result.reshape(-1, 1)
+                residual_results.append(evaluated_result)
+
+            residual_prediction = np.hstack(residual_results)
+            assert residual_prediction.shape == (X.shape[0], 2)  # [B, 2]
+
+            # Combine original and residual predictions
+            combined_prediction = previous_prediction + residual_prediction
+            assert combined_prediction.shape == (X.shape[0], 2)  # [B, 2]
+
+            mse_error = mean_squared_error(y, combined_prediction)
+            print(f"Combined MSE Error: {mse_error}")
+        else:
+            # Calculate MSE with the original predictions
+            mse_error = mean_squared_error(y, previous_prediction)
+            print(f"Original MSE Error: {mse_error}")
+
+        pysr_config['mse'] = mse_error
 
     config = vars(args)
     config.update(pysr_config)
@@ -250,6 +375,43 @@ def get_config(args):
     })
 
     return config
+
+
+def calculate_complexity_of_variables(target, previous_complexities, X):
+    complexities = []
+    if target in ['f2', 'f2_direct']:
+        complexities = [1] * X.shape[1]
+    else:
+        for feature in X.columns:
+            if feature in previous_complexities:
+                complexities.append(previous_complexities[feature])
+            else:
+                complexities.append(1)
+    return complexities
+
+
+def calculate_recursive_complexity(expr, previous_complexities):
+    # This function will parse the expression and calculate the total complexity
+    # For simplicity, let's assume it's a linear combination of complexities
+    # You might need a more sophisticated parser depending on your actual expressions
+    total_complexity = 0
+    terms = expr.split('+')
+    for term in terms:
+        if '*' in term:
+            factors = term.split('*')
+            factor_complexity = 1
+            for factor in factors:
+                if factor in previous_complexities:
+                    factor_complexity *= previous_complexities[factor]
+                else:
+                    factor_complexity += 1
+            total_complexity += factor_complexity
+        else:
+            if term in previous_complexities:
+                total_complexity += previous_complexities[term]
+            else:
+                total_complexity += 1
+    return total_complexity
 
 
 def run_pysr(config):
@@ -267,6 +429,21 @@ def run_pysr(config):
             config=config,
         )
 
+    # with open(config['previous_sr_path'], 'rb') as f:
+    #     previous_sr_model = pickle.load(f)    
+    # previous_complexities = {}
+    # for index, row in previous_sr_model.iterrows():
+    #     previous_complexities[row['Feature']] = row['Complexity']
+    
+    # # Calculate complexities of variables
+    # complexity_of_variables = calculate_complexity_of_variables(config['target'], previous_complexities, X)
+    
+    # # Adjust complexities if running recursively
+    # if config['sr_residual'] and config['target'] == 'f2_direct':
+    #     for expr in previous_complexities:
+    #         previous_complexities[expr] = calculate_recursive_complexity(expr, previous_complexities)
+
+    # model.fit(X, y, variable_names=variable_names, complexity_of_variables=complexity_of_variables)
     model.fit(X, y, variable_names=variable_names)
     print('Done running pysr')
 

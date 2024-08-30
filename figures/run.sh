@@ -21,4 +21,5 @@ conda activate bnn_period
 # Enable errexit (exit on error)
 set -e
 
-python period_ratio_figure.py "$@"
+
+python period_ratio_figure.py --Ngrid 1600 --version 43139 --pysr_version 18156 --compute

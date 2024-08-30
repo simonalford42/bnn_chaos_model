@@ -15,8 +15,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=ellis
 
-source /home/sca63/mambaforge/etc/profile.d/conda.sh
-conda activate bnn_chaos_model
+# source /home/sca63/mambaforge/etc/profile.d/conda.sh
+# conda activate bnn_chaos_model
 
 # Enable errexit (exit on error)
 set -e
@@ -32,31 +32,46 @@ version2=$((1 + RANDOM % 999999))
 ##############################################################################################################################################################################################################################################
 
 # first run of pysr on f2 (direct)
-# python -u sr.py --version 29170 --target f2_direct --seed 0 # 29170 is linear + mlp
-# python -u sr.py --version 7923 --target f2_direct --seed 0 # 7923 is products3 with only cosines
-# python -u sr.py --version 8218 --target f2_direct --seed 0 # 8218 is products3 with cos and sin
+# python -u sr.py --version 29170 --target f2_direct --seed 0 # 29170 (linear)
+# python -u sr.py --version 8218 --target f2_direct --seed 0 # 8218 (products3)
+# python -u sr.py --version 29170 --target f2 --seed 0 #job 4128301 (5489) (linear)
+# python -u sr.py --version 8218 --target f2 --seed 0 #job 4128302 (21791) (products3) 
+# python -u sr.py --version 43139 --target f2 --seed 0 # 43139 is Simon's linear (4129698) --> didn't work because 43139 only has mean, no std
 
-# second run of pysr on f2 (input is summary stats + equations)
-# python -u sr.py --version 29170 --target f2_direct --sr_residual --previous_sr_path sr_results/18156.pkl --seed 0 # f1 is linear
-# python -u sr.py --version 7923 --target f2_direct --sr_residual --previous_sr_path sr_results/.pkl --seed 0 # f1 is products3 with only cosines
-# python -u sr.py --version 8218 --target f2_direct --sr_residual --previous_sr_path sr_results/37967.pkl --seed 0 # f1 is products3 with sin & cos
+# second run of pysr on f2 (input is summary stats + equations)           
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl --seed 0 # job 4129727 (4746) (linear, y=y-prod)
+# python -u sr.py --version 8218 --target f2 --sr_residual --previous_sr_path sr_results/21791.pkl --seed 0 # job 4129755 (11946) (products3, y=y-prod)
+python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl --seed 0 # job 4129762 (18315) (4158097) (linear, y=y)
+# python -u sr.py --version 8218 --target f2 --sr_residual --previous_sr_path sr_results/21791.pkl --seed 0 # job 4129764 (75407) (products3, y=y)
 
-
-
-# use 43139_0 for pysr residual runs
+# third run of pysr on f2
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/4746.pkl --seed 0 # job 4129759 (57868) (linear, y=y-prod)
+# python -u sr.py --version 8218 --target f2 --sr_residual --previous_sr_path sr_results/.pkl --seed 0 # job  () (products3, y=y-prod)
 
 ##############################################################################################################################################################################################################################################
 ##############################################################################################################################################################################################################################################
 ##############################################################################################################################################################################################################################################
 
-# for direct pysr validation loss evaluation
+# for direct pysr validation loss evaluation (OG): 4129836
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_model_selection best --total_steps 100 --load_f1 29170
 
-# for residual pysr validation loss evaluation
+# for residual (NN) pysr validation loss evaluation (OG): 4129851
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_residual sr_results/92071.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
 
-# for residual (equations) pysr validation loss
+# for residual (equations) pysr validation loss evaluation (OG): 4129835
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_residual sr_results/92985.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5456.pkl --pysr_f2_residual sr_results/52420.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
-#python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/18156.pkl --pysr_f2_residual sr_results/.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
-python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/37967.pkl --pysr_f2_residual sr_results/66693.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
+
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+
+# for direct pysr validation loss evaluation: 4129853
+# python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_model_selection best --total_steps 100 --load_f1 29170
+
+# for residual (NN) pysr validation loss evaluation: 4129852 (linear, y=y-prod) |  (linear, y=y)
+# python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_residual sr_results/4746.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
+# python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_residual sr_results/18315.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
+
+# for residual (equations) pysr validation loss evaluation: (linear, y=y-prod) | (linear, y=y)
+# python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_residual sr_results/.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170

@@ -772,21 +772,18 @@ class VarModel(pl.LightningModule):
             regress_nn = modules.mlp(summary_dim, 2, hparams['hidden_dim'], hparams['f2_depth'])
 
         def calculate_additional_features(summary_stats, previous_sr_model_path):
-            # Move the tensor to CPU before converting to numpy
-            summary_stats_np = summary_stats.cpu().detach().numpy()
-
             with open(previous_sr_model_path, 'rb') as f:
                 previous_sr_model = pkl.load(f)
 
             additional_features = []
-
-            equation_set = previous_sr_model.equations_
-            for index, equation in equation_set.iterrows():
-                lambda_func = equation['lambda_format']
-                evaluated_result = lambda_func(summary_stats_np)
-                # Ensure the result is reshaped to match the batch size
-                evaluated_result = evaluated_result.reshape(-1, 1)
-                additional_features.append(evaluated_result)
+            summary_stats_np = summary_stats.cpu().detach().numpy()
+            for equation_set in previous_sr_model.equations_:
+                for index, equation in equation_set.iterrows():
+                    lambda_func = equation['lambda_format']
+                    evaluated_result = lambda_func(summary_stats_np)
+                    # Ensure the result is reshaped to match the batch size
+                    evaluated_result = evaluated_result.reshape(-1, 1)
+                    additional_features.append(evaluated_result)
 
             additional_features = np.hstack(additional_features)
             additional_features_tensor = torch.tensor(additional_features, dtype=summary_stats.dtype, device=summary_stats.device)

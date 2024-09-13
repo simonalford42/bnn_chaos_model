@@ -16,7 +16,6 @@
 #SBATCH --partition=ellis
 
 source /home/sca63/mambaforge/etc/profile.d/conda.sh
-conda activate bnn_period
 
 # Enable errexit (exit on error)
 set -e

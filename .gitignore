@@ -14,4 +14,8 @@ models
 *.ckpt
 *.pt
 *.npy
+<<<<<<< HEAD
 period_results
+=======
+figures/
+>>>>>>> 5b5d5241aab7b36a5d9a36fd1b48d50ad3269309

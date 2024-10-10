@@ -35,12 +35,12 @@ version2=$((1 + RANDOM % 999999))
 # first run of pysr on f2 (direct)
 # python -u sr.py --version 29170 --target f2_direct # 29170 (linear)
 # python -u sr.py --version 29170 --target f2 #4128301 (5489) (linear)
-# python -u sr.py --version 29170 --target f2 --time_in_hours 2 #5102745   5106008    5108338
+# python -u sr.py --version 29170 --target f2cvbnetyry
+# python -u sr.py --version 29170 --target f2 --time_in_hours 2 
 
 # second run of pysr on f2 (input is summary stats + equations)           
 # python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl #  (linear, y=y-prod)
-python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl # 45730 (linear, y=y)
-# 5108343
+python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl #  (linear, y=y)
 
 # third run of pysr on f2
 # python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/4746.pkl # job 4129759 (57868) (linear, y=y-prod)
@@ -77,4 +77,4 @@ python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_
 # for residual (equations) pysr validation loss evaluation:
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_residual sr_results/45730.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
 # 4896451    45730 (y=y) 
-# 5074759    75373 (y=y-pred) 1.800
+# 5074759    75373 (y=y-pred) 

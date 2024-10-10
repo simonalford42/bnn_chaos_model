@@ -1,0 +1,58 @@
+name: conda-forge
+
+# This CI tries the conda-forge version of PySR
+
+on:
+  schedule:
+    # Run at the 0th minute of the 10th hour (UTC).
+    # This means the job will run at 5am EST.
+    - cron: "0 10 * * *"
+    # This will automatically run on master branch only.
+  workflow_dispatch:
+
+jobs:
+  conda_test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+        os: ['ubuntu-latest']
+        use-mamba: [true, false]
+        include:
+          - python-version: 3.9
+            os: 'windows-latest'
+            use-mamba: true
+          - python-version: 3.12
+            os: 'windows-latest'
+            use-mamba: true
+          - python-version: 3.9
+            os: 'macos-latest'
+            use-mamba: true
+          - python-version: 3.12
+            os: 'macos-latest'
+            use-mamba: true
+
+    steps:
+      - name: "Set up Conda"
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          auto-activate-base: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: pysr-test
+      - name: "Install pysr with mamba"
+        run: conda activate pysr-test && mamba install pysr
+        if: ${{ matrix.use-mamba }}
+      - name: "Install pysr with conda"
+        run: conda activate pysr-test && conda install pysr
+        if: ${{ !matrix.use-mamba }}
+      - name: "Run tests"
+        run: |
+          pip install pytest nbval
+          python -m pysr test main,startup

@@ -127,56 +127,97 @@ def load_inputs_and_targets(config):
         variable_names = [f'm{i}' for i in range(n)] + [f's{i}' for i in range(n)]
 
         if config['sr_residual']:
-            # 1. load the previous pysr results, using highest complexity
+            # 1. Load the previous PySR results, using highest complexity
             with open(config['previous_sr_path'], 'rb') as f:
                 previous_sr_model = pickle.load(f)
 
-            # 2. calculate mean and std from previous results (previous run must have used target=='f2')
+            # 2. Calculate mean and std from previous results (previous run must have used target=='f2')
             if isinstance(out_dict['summary_stats'], torch.Tensor):
                 summary_stats_np = out_dict['summary_stats'].detach().numpy()
             else:
                 summary_stats_np = out_dict['summary_stats']
 
-            # get the highest complexity equation
-            mean_equations = previous_sr_model.equations_[0]
-            std_equations = previous_sr_model.equations_[1]
-            max_complexity_idx_mean = mean_equations['complexity'].idxmax()
-            max_complexity_idx_std = std_equations['complexity'].idxmax()
+            flag = "topk"
+            variable_name_map = {}
 
-            mean_equation = mean_equations.loc[max_complexity_idx_mean]
-            std_equation = std_equations.loc[max_complexity_idx_std]
+            if flag == "middle":
+                # Get the middle complexity mean equation
+                mean_equations = previous_sr_model.equations_[0].sort_values('complexity')
+                middle_idx_mean = len(mean_equations) // 2
 
-            additional_features = []
-            for equation in [mean_equation, std_equation]:
-                lambda_func = equation['lambda_format']
+                mean_equation = mean_equations.iloc[middle_idx_mean]
+
+                additional_features = []
+                lambda_func = mean_equation['lambda_format']
                 evaluated_result = lambda_func(summary_stats_np)
-                # Ensure the result is reshaped to match the batch size
                 evaluated_result = evaluated_result.reshape(-1, 1)
                 additional_features.append(evaluated_result)
+                # Map the variable name to the corresponding complexity and equation
+                variable_name_map[f'prev0'] = (mean_equation['complexity'], mean_equation['equation'])
 
-            # # Entire pareto front evaluation (y=y)
-            # additional_features = []
-            # for equation_set in previous_sr_model.equations_:
-            #     for index, equation in equation_set.iterrows():
-            #         lambda_func = equation['lambda_format']
-            #         evaluated_result = lambda_func(summary_stats_np)
-            #         # Ensure the result is reshaped to match the batch size
-            #         evaluated_result = evaluated_result.reshape(-1, 1)
-            #         additional_features.append(evaluated_result)
+            elif flag == "top":
+                # Get the highest complexity mean equation
+                mean_equations = previous_sr_model.equations_[0]
+                max_complexity_idx_mean = mean_equations['complexity'].idxmax()
+
+                mean_equation = mean_equations.loc[max_complexity_idx_mean]
+
+                additional_features = []
+                lambda_func = mean_equation['lambda_format']
+                evaluated_result = lambda_func(summary_stats_np)
+                evaluated_result = evaluated_result.reshape(-1, 1)
+                additional_features.append(evaluated_result)
+                # Map the variable name to the corresponding complexity and equation
+                variable_name_map[f'prev0'] = (mean_equation['complexity'], mean_equation['equation'])
+
+            elif flag == "topk":
+                selected_complexities = {6, 12, 14, 21, 28, 29}
+                selected_equations = []
+                for equation in previous_sr_model.equations_[0].iterrows():
+                    complexity = equation[1]['complexity']
+                    if complexity in selected_complexities:
+                        lambda_func = equation[1]['lambda_format']
+                        selected_equations.append((lambda_func, complexity, equation[1]['equation']))
+
+                # Evaluate the selected mean equations and add them as features
+                additional_features = []
+                for i, (lambda_func, complexity, equation_str) in enumerate(selected_equations):
+                    evaluated_result = lambda_func(summary_stats_np)
+                    evaluated_result = evaluated_result.reshape(-1, 1)
+                    additional_features.append(evaluated_result)
+                    # Map the variable name to the corresponding complexity and equation
+                    variable_name_map[f'prev{i}'] = (complexity, equation_str)
+
+            elif flag == "all":
+                # Entire pareto front mean evaluation (y=y)
+                additional_features = []
+                for index, equation in previous_sr_model.equations_[0].iterrows():
+                    lambda_func = equation['lambda_format']
+                    evaluated_result = lambda_func(summary_stats_np)
+                    evaluated_result = evaluated_result.reshape(-1, 1)
+                    additional_features.append(evaluated_result)
+                    # Map the variable name to the corresponding complexity and equation
+                    variable_name_map[f'prev{index}'] = (equation['complexity'], equation['equation'])
 
             # Convert list of arrays to a single numpy array
             additional_features = np.hstack(additional_features)
             # Concatenate the original summary stats with the evaluated results
-            X = np.concatenate([summary_stats_np, additional_features], axis=1)
+            X = np.concatenate([additional_features, summary_stats_np], axis=1)
             in_dim = model.summary_dim + additional_features.shape[1]
-            variable_names += [f'prev{i}' for i in range(additional_features.shape[1])]
+            variable_names = [f'prev{i}' for i in range(additional_features.shape[1])] + variable_names
+
+            # Print the variable names, associated complexities, and their equations
+            print("Variable names, their associated complexities, and equations:")
+            for variable_name, (complexity, equation_str) in variable_name_map.items():
+                print(f"{variable_name}: complexity {complexity}, equation: {equation_str}")
+
 
     # # Continue for y = y - previous_prediction
     # elif config['target'] == 'f2':
     #     # inputs to SR are the inputs to f2 neural network
     #     X = out_dict['summary_stats']  # [B, 40]
     #     # outputs are the (mean, std) predictions of the nn
-    #     # y = y remains unchanged here
+    #     y = y 
 
     #     in_dim = model.summary_dim
     #     out_dim = 2
@@ -386,20 +427,28 @@ def get_config(args):
 #         ncyclesperiteration=1000, # increase utilization since usually using 32-ish cores?
 #     )
 
+#     model = spock_reg_model.load(version=config['version'])
+#     model.make_dataloaders()
+#     model.eval()
+
+#     data_iterator = iter(model.train_dataloader())
+#     x, y = next(data_iterator)
+#     while x.shape[0] < config['n']:
+#         next_x, next_y = next(data_iterator)
+#         x = torch.cat([x, next_x], dim=0)
+#         y = torch.cat([y, next_y], dim=0)
+#     out_dict = model.forward(x, return_intermediates=True, noisy_val=False)
+#     X = out_dict['summary_stats']  # [B, 40]
+#     y = y 
+
 #     if args.loss_fn == 'll':
 #         assert args.target == 'f2_direct', 'log likelihood loss only useful for f2_direct'
 #         pysr_config['elementwise_loss'] = LL_LOSS
 #     else:
+#         # Evaluate the original SR model
 #         with open(config['previous_sr_path'], 'rb') as f:
 #             previous_sr_model = pickle.load(f)
 
-#         if 'residual_sr_path' in config:
-#             with open(config['residual_sr_path'], 'rb') as f:
-#                 residual_sr_model = pickle.load(f)
-#         else:
-#             residual_sr_model = None
-
-#         # Evaluate the original SR model
 #         summary_stats_np = X if isinstance(X, np.ndarray) else X.detach().numpy()
         
 #         mean_equations = previous_sr_model.equations_[0]
@@ -422,6 +471,11 @@ def get_config(args):
 #         assert previous_prediction.shape == (X.shape[0], 2)  # [B, 2]
 
 #         # Evaluate the residual SR model
+#         if 'residual_sr_path' in config:
+#             with open(config['residual_sr_path'], 'rb') as f:
+#                 residual_sr_model = pickle.load(f)
+#         else:
+#             residual_sr_model = None
 #         if residual_sr_model:
 #             residual_results = []
 #             residual_mean_equations = residual_sr_model.equations_[0]
@@ -467,41 +521,77 @@ def get_config(args):
 #     return config
 
 
-def calculate_complexity_of_variables(target, previous_complexities, X):
-    complexities = []
-    if target in ['f2', 'f2_direct']:
-        complexities = [1] * X.shape[1]
-    else:
-        for feature in X.columns:
-            if feature in previous_complexities:
-                complexities.append(previous_complexities[feature])
-            else:
-                complexities.append(1)
-    return complexities
+# def run_pysr(config):
+#     command = utils.get_script_execution_command()
+#     print(command)
 
+#     # Load inputs and targets
+#     X, y, variable_names = load_inputs_and_targets(config)
 
-def calculate_recursive_complexity(expr, previous_complexities):
-    # This function will parse the expression and calculate the total complexity
-    # For simplicity, let's assume it's a linear combination of complexities
-    # You might need a more sophisticated parser depending on your actual expressions
-    total_complexity = 0
-    terms = expr.split('+')
-    for term in terms:
-        if '*' in term:
-            factors = term.split('*')
-            factor_complexity = 1
-            for factor in factors:
-                if factor in previous_complexities:
-                    factor_complexity *= previous_complexities[factor]
-                else:
-                    factor_complexity += 1
-            total_complexity += factor_complexity
-        else:
-            if term in previous_complexities:
-                total_complexity += previous_complexities[term]
-            else:
-                total_complexity += 1
-    return total_complexity
+#     # Print out the contents of X
+#     print(f"Contents of X (first 5 rows):\n{X[:5]}")
+#     print(f"Shape of X: {X.shape} (rows, columns)")
+#     num_features = X.shape[1]
+#     print(f"Number of features in X: {num_features}")
+
+#     model_kwargs = config['pysr_config']
+
+#     complexity_of_variables = None  # Default to None
+
+#     # Check if it is an sr_residual run
+#     if config.get('sr_residual', False):
+#         # Load the previous PySR results
+#         with open(config['previous_sr_path'], 'rb') as f:
+#             previous_sr_model = pickle.load(f)
+        
+#         # Get the complexity column from the previous run
+#         complexities = previous_sr_model.equations_[0]['complexity'].values
+
+#         # Map complexities to the respective input variables
+#         complexity_of_variables = list(complexities[:X.shape[1]])
+
+#         # Print the complexities and make sure they match the number of features
+#         print(f"Complexity of variables: {complexity_of_variables}")
+#         print(f"Number of complexities: {len(complexity_of_variables)}")
+        
+#         # Ensure the number of complexities matches the number of features
+#         if len(complexity_of_variables) != num_features:
+#             raise ValueError(f"Mismatch between complexities ({len(complexity_of_variables)}) and number of features ({num_features}).")
+
+#     # Initialize PySRRegressor without complexity_of_variables in the __init__
+#     model = pysr.PySRRegressor(**model_kwargs)
+
+#     if not config['no_log']:
+#         wandb.init(
+#             entity='bnn-chaos-model',
+#             project='planets-sr',
+#             config=config,
+#         )
+
+#     # Fit the model, passing complexity_of_variables only if it exists
+#     if complexity_of_variables:
+#         print(f"Running PySR with custom complexities: {complexity_of_variables}")
+#         model.fit(X, y, variable_names=variable_names, complexity_of_variables=complexity_of_variables)
+#     else:
+#         print("Running PySR without custom complexities.")
+#         model.fit(X, y, variable_names=variable_names)
+
+#     print('Done running pysr')
+
+#     losses = [min(eqs['loss']) for eqs in model.equation_file_contents_]
+
+#     if not config['no_log']:
+#         wandb.log({'avg_loss': sum(losses)/len(losses),
+#                    'losses': losses,
+#                    })
+
+#     try:
+#         # delete julia files: julia-1911988-17110333239-0016.out
+#         subprocess.run(f'rm julia*.out', shell=True, check=True)
+#     except subprocess.CalledProcessError as e:
+#         print(f"An error occurred while trying to delete the backup files: {e}")
+
+#     print(f"Saved to path: {config['equation_file']}")
 
 
 def run_pysr(config):
@@ -510,7 +600,75 @@ def run_pysr(config):
 
     X, y, variable_names = load_inputs_and_targets(config)
 
-    model = pysr.PySRRegressor(**config['pysr_config'])
+    # Print out the shape of X to see the number of features (columns)
+    print(f"Shape of X: {X.shape} (rows, columns)")
+    num_features = X.shape[1]
+    print(f"Number of features in X: {num_features}")
+
+    model_kwargs = config['pysr_config']
+    complexity_of_variables = None  # Default to None
+
+    flag = "topk"
+
+    # Check if it is an sr_residual run
+    if config.get('sr_residual', False):
+        # Load the previous PySR results
+        with open(config['previous_sr_path'], 'rb') as f:
+            previous_sr_model = pickle.load(f)
+
+        # Only interested in the mean equations for all flags
+        mean_equations = previous_sr_model.equations_[0]
+
+        if flag == "top":
+            # Get the highest complexity mean equation
+            max_complexity_idx_mean = mean_equations['complexity'].idxmax()
+            max_complexity = mean_equations.loc[max_complexity_idx_mean]['complexity']
+
+            # Set complexity_of_variables to the max complexity of the selected equation followed by 1's
+            complexity_of_variables = [max_complexity] + [1] * (num_features - 1)
+
+            # Print the selected equation and complexity
+            print(f"Top complexity selected: {max_complexity}")
+            print(f"Complexity of variables for 'top': {complexity_of_variables}")
+
+        elif flag == "topk":
+            # Filter mean equations with complexity 3, 6, 10, and 15
+            selected_complexities = {6, 12, 14, 21, 28, 29}
+            complexities_list = []
+
+            for _, equation in mean_equations.iterrows():
+                complexity = equation['complexity']
+                if complexity in selected_complexities:
+                    complexities_list.append(complexity)
+
+            # Set complexity_of_variables to the complexities of the selected top k equations followed by 1's
+            complexity_of_variables = complexities_list + [1] * (num_features - len(complexities_list))
+
+            # Print the selected equations and complexities
+            print(f"TopK complexities selected: {complexities_list}")
+            print(f"Complexity of variables for 'topk': {complexity_of_variables}")
+
+        elif flag == "all":
+            # Use all equations for the residual
+            complexities = mean_equations['complexity'].values
+            complexity_of_variables = list(complexities[:X.shape[1]])  # Adjust the length accordingly
+
+            # If the number of residual features is not equal to the number of features, append or adjust
+            if len(complexity_of_variables) != num_features:
+                print(f"Adjusting complexity list to match the number of features in X.")
+                if len(complexity_of_variables) < num_features:
+                    # If there are fewer complexities, fill in with default values (e.g., 1)
+                    complexity_of_variables += [1] * (num_features - len(complexity_of_variables))
+                elif len(complexity_of_variables) > num_features:
+                    # If there are more complexities, trim the list
+                    complexity_of_variables = complexity_of_variables[:num_features]
+
+            # Print the adjusted complexities for debugging
+            print(f"Complexity of variables for 'all': {complexity_of_variables}")
+            print(f"Number of complexities: {len(complexity_of_variables)}")
+
+    # Initialize PySRRegressor without complexity_of_variables in the __init__
+    model = pysr.PySRRegressor(**model_kwargs)
 
     if not config['no_log']:
         wandb.init(
@@ -519,22 +677,14 @@ def run_pysr(config):
             config=config,
         )
 
-    # with open(config['previous_sr_path'], 'rb') as f:
-    #     previous_sr_model = pickle.load(f)    
-    # previous_complexities = {}
-    # for index, row in previous_sr_model.iterrows():
-    #     previous_complexities[row['Feature']] = row['Complexity']
-    
-    # # Calculate complexities of variables
-    # complexity_of_variables = calculate_complexity_of_variables(config['target'], previous_complexities, X)
-    
-    # # Adjust complexities if running recursively
-    # if config['sr_residual'] and config['target'] == 'f2_direct':
-    #     for expr in previous_complexities:
-    #         previous_complexities[expr] = calculate_recursive_complexity(expr, previous_complexities)
+    # Fit the model, passing complexity_of_variables only if it exists
+    if complexity_of_variables:
+        print(f"Running PySR with custom complexities: {complexity_of_variables}")
+        model.fit(X, y, variable_names=variable_names, complexity_of_variables=complexity_of_variables)
+    else:
+        print("Running PySR without custom complexities.")
+        model.fit(X, y, variable_names=variable_names)
 
-    # model.fit(X, y, variable_names=variable_names, complexity_of_variables=complexity_of_variables)
-    model.fit(X, y, variable_names=variable_names)
     print('Done running pysr')
 
     losses = [min(eqs['loss']) for eqs in model.equation_file_contents_]
@@ -551,6 +701,7 @@ def run_pysr(config):
         print(f"An error occurred while trying to delete the backup files: {e}")
 
     print(f"Saved to path: {config['equation_file']}")
+
 
 
 def spock_features(X):

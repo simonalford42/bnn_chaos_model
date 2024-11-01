@@ -24,7 +24,7 @@ set -e
 version=$((1 + RANDOM % 999999))
 version2=$((1 + RANDOM % 999999))
 
-# python -u find_minima.py --total_steps 300000 --version $version --f1_variant linear --f2_variant mlp
+# python -u find_minima.py --total_steps 300000 --version $version --f1_variant linear --f2_variant mlp 
 # python -u find_minima.py --total_steps 300000 --version $version --f1_variant products3 --f2_variant mlp
 # python -u find_minima.py --total_steps 300000 --version $version --f1_variant bimt --f2_variant mlp
 
@@ -35,15 +35,14 @@ version2=$((1 + RANDOM % 999999))
 # first run of pysr on f2 (direct)
 # python -u sr.py --version 29170 --target f2_direct # 29170 (linear)
 # python -u sr.py --version 29170 --target f2 #4128301 (5489) (linear)
-# python -u sr.py --version 29170 --target f2cvbnetyry
 # python -u sr.py --version 29170 --target f2 --time_in_hours 2 
 
 # second run of pysr on f2 (input is summary stats + equations)           
 # python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl #  (linear, y=y-prod)
-python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl #  (linear, y=y)
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl #  (linear, y=y)
 
 # third run of pysr on f2
-# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/4746.pkl # job 4129759 (57868) (linear, y=y-prod)
+python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/86792.pkl 
 
 ##############################################################################################################################################################################################################################################
 ##############################################################################################################################################################################################################################################

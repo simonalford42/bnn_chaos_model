@@ -42,7 +42,7 @@ version2=$((1 + RANDOM % 999999))
 # python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl #  (linear, y=y)
 
 # third run of pysr on f2
-python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/86792.pkl 
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/86792.pkl 
 
 ##############################################################################################################################################################################################################################################
 ##############################################################################################################################################################################################################################################
@@ -77,3 +77,9 @@ python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_
 # python -u find_minima.py --version $version2 --eval --pysr_f2 sr_results/5489.pkl --pysr_f2_residual sr_results/45730.pkl --pysr_f2_model_selection best --pysr_f2_residual_model_selection best --total_steps 100 --load_f1 29170
 # 4896451    45730 (y=y) 
 # 5074759    75373 (y=y-pred) 
+
+
+
+
+# python data_generation.py --n 10000 --output_path data.pkl
+python heron.py --data_path data.pkl --niterations 10000 --time_in_hours 1

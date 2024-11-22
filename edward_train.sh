@@ -35,14 +35,15 @@ version2=$((1 + RANDOM % 999999))
 # first run of pysr on f2 (direct)
 # python -u sr.py --version 29170 --target f2_direct # 29170 (linear)
 # python -u sr.py --version 29170 --target f2 #4128301 (5489) (linear)
-# python -u sr.py --version 29170 --target f2 --time_in_hours 2 
+python -u sr.py --version 29170 --target f2 --time_in_hours 1 --seed 24
 
 # second run of pysr on f2 (input is summary stats + equations)           
 # python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/5489.pkl #  (linear, y=y-prod)
-# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl #  (linear, y=y)
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/16506.pkl --time_in_hours 1  #  (linear, y=y)
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/37409.pkl --time_in_hours 1
 
 # third run of pysr on f2
-# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/86792.pkl 
+# python -u sr.py --version 29170 --target f2 --sr_residual --previous_sr_path sr_results/94758.pkl --previous_sr_path_2 sr_results/58805.pkl --seed 15
 
 ##############################################################################################################################################################################################################################################
 ##############################################################################################################################################################################################################################################
@@ -79,7 +80,23 @@ version2=$((1 + RANDOM % 999999))
 # 5074759    75373 (y=y-pred) 
 
 
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+##############################################################################################################################################################################################################################################
+
+# python data_generation.py --n 10000 --output_path heron_data_2.pkl
+# python heron.py --data_path heron_data_2.pkl --max_size 50 --time_in_hours 2 --seed 42
+# python heron.py --data_path heron_data_2.pkl --time_in_hours 1 --sr_residual --previous_sr_path sr_results/59411.pkl --flag topk --selected_complexities 3 
+
+# python data_generation.py --n 10000 --output_path heron_log_data.pkl
+# python heron.py --data_path heron_log_data.pkl --max_size 50 --time_in_hours 24 --seed 42
+# python heron.py --data_path heron_log_data.pkl --sr_residual --previous_sr_path sr_results/.pkl --flag all
+
+# python mb_data_generation.py --n 10000 --output_path mb_data.pkl 
+# python run_pysr_mb.py --data_path mb_data.pkl --include_mass --max_size 50 --time_in_hours 1
+# python run_pysr_mb.py --data_path mb_data.pkl --include_mass --time_in_hours 1 --sr_residual --previous_sr_path sr_results_mb/40962.pkl --flag all
 
 
-# python data_generation.py --n 10000 --output_path data.pkl
-python heron.py --data_path data.pkl --niterations 10000 --time_in_hours 1
